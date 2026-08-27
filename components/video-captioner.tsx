@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Upload, Play, Pause, FastForward, Rewind, Settings, Type, Palette, Layout, Download, Check, Move, List } from 'lucide-react';
+import { Upload, Play, Pause, FastForward, Rewind, Settings, Type, Palette, Layout, Download, Check, Move, List, Wand2, Loader2, Crosshair } from 'lucide-react';
 
 const CAPTION_STYLES = [
   { id: 'style-1', name: 'Classic Pop', className: 'text-3xl font-bold text-white drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)] stroke-black stroke-2', highlightClass: 'text-yellow-400 scale-110 drop-shadow-[0_0_10px_rgba(250,204,21,0.8)]' },
@@ -131,6 +131,10 @@ export default function VideoCaptioner() {
   const [isDragging, setIsDragging] = useState(false);
   const [videoSize, setVideoSize] = useState({ width: 16, height: 9 });
   const [activeTab, setActiveTab] = useState('styles');
+  const [captionSize, setCaptionSize] = useState(100);
+  const [captionColors, setCaptionColors] = useState({ background: '#111827', text: '#ffffff', highlight: '#facc15' });
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [transcriptionMessage, setTranscriptionMessage] = useState('');
   
   const videoRef = useRef(null);
   const videoContainerRef = useRef(null);
@@ -143,6 +147,28 @@ export default function VideoCaptioner() {
         newTranscript[index][field] = parseFloat(value) || 0;
     }
     setTranscript(newTranscript);
+  };
+
+  const syncWordToPlayhead = (index) => {
+    const next = transcript.map((item, i) => i === index ? { ...item, start: Math.max(0, currentTime - 0.15), end: Math.max(currentTime, currentTime + 0.45) } : item);
+    setTranscript(next.map((item, i) => i > 0 ? { ...item, start: Math.max(item.start, next[i - 1].end + 0.01), end: Math.max(item.end, item.start + 0.05) } : item));
+  };
+
+  const transcribeVideo = async () => {
+    if (!videoFile || !videoFile.type?.startsWith('video/')) {
+      setTranscriptionMessage('Upload an MP4 first to transcribe its voiceover.');
+      return;
+    }
+    setIsTranscribing(true); setTranscriptionMessage('Extracting audio and matching words…');
+    try {
+      const formData = new FormData(); formData.append('file', videoFile);
+      const response = await fetch('/api/transcribe', { method: 'POST', body: formData });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Transcription failed');
+      if (!result.words?.length) throw new Error('No speech was detected. Use the manual timing editor below.');
+      setTranscript(result.words); setTranscriptionMessage(`Matched ${result.words.length} words to the voiceover.`);
+    } catch (error) { setTranscriptionMessage(error instanceof Error ? error.message : 'Transcription failed.'); }
+    finally { setIsTranscribing(false); }
   };
 
   // Process transcript into phrases on load
@@ -412,7 +438,7 @@ export default function VideoCaptioner() {
                             </div>
                             <div 
                             className={`text-center transition-all duration-200 ${selectedStyle.className} ${selectedStyle.id === 'style-28' ? 'w-full' : ''}`}
-                            style={selectedStyle.style || {}}
+                            style={{ ...(selectedStyle.style || {}), fontSize: `calc(1em * ${captionSize / 100})`, color: captionColors.text, backgroundColor: captionColors.background }}
                             >
                             {(activePhrase || phrases[0]).words.map((wordObj, i) => {
                                 // Determine if this word is currently active or has already been passed in this phrase
@@ -429,6 +455,7 @@ export default function VideoCaptioner() {
                                     className={`inline-block mx-[0.15em] transition-all duration-150 transform-gpu
                                     ${applyHighlight ? selectedStyle.highlightClass : ''}
                                     `}
+                                    style={applyHighlight ? { color: captionColors.highlight } : undefined}
                                 >
                                     {wordObj.word}
                                 </span>
@@ -535,6 +562,12 @@ export default function VideoCaptioner() {
                     </div>
                   </div>
 
+                  <div className="p-4 border-b border-gray-200 space-y-3">
+                    <div className="flex items-center justify-between"><h3 className="text-sm font-medium text-gray-600">Appearance</h3><span className="text-xs text-gray-500">{captionSize}%</span></div>
+                    <label className="flex items-center justify-between gap-3 text-xs text-gray-600">Size<input aria-label="Caption size" type="range" min="50" max="200" step="5" value={captionSize} onChange={(e) => setCaptionSize(Number(e.target.value))} className="w-32 accent-indigo-600" /></label>
+                    <div className="grid grid-cols-3 gap-2">{([['background','Background'],['text','Main text'],['highlight','Highlight']] as const).map(([key,label]) => <label key={key} className="flex flex-col gap-1 text-[11px] text-gray-500"><span>{label}</span><input aria-label={`${label} color`} type="color" value={captionColors[key]} onChange={(e) => setCaptionColors((colors) => ({ ...colors, [key]: e.target.value }))} className="h-8 w-full cursor-pointer rounded border border-gray-200" /></label>)}</div>
+                  </div>
+
                   {/* Styles Grid */}
                   <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-gray-50/30">
                     <h3 className="text-sm font-medium text-gray-500 mb-3">Templates ({CAPTION_STYLES.length})</h3>
@@ -577,6 +610,8 @@ export default function VideoCaptioner() {
               </>
           ) : (
               <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-gray-50/30">
+                 <button onClick={transcribeVideo} disabled={isTranscribing || !videoFile?.type?.startsWith('video/')} className="w-full mb-3 flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"><Wand2 className="h-4 w-4" />{isTranscribing ? 'Matching voiceover…' : 'Auto-sync voiceover'}</button>
+                 {transcriptionMessage && <p className="mb-3 rounded-lg border border-indigo-100 bg-indigo-50 p-3 text-xs text-indigo-800">{transcriptionMessage}</p>}
                  <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-lg text-sm mb-5 shadow-sm">
                     <strong>Why isn't my video synced?</strong>
                     <p className="mt-1 text-amber-700/90 leading-relaxed">Browser apps cannot automatically transcribe audio without a backend AI. A looping <strong>Demo Transcript</strong> is currently applied.</p>
@@ -605,6 +640,7 @@ export default function VideoCaptioner() {
                                 onChange={(e) => handleTranscriptChange(index, 'end', e.target.value)}
                                 className="w-full p-1.5 text-sm border border-gray-200 rounded bg-gray-50 focus:bg-white focus:outline-none"
                             />
+                            <button type="button" title="Set this word to the current playhead" onClick={() => syncWordToPlayhead(index)} className="rounded p-1 text-indigo-600 hover:bg-indigo-50"><Crosshair className="h-4 w-4" /></button>
                             <input 
                                 type="text" 
                                 value={item.word} 
