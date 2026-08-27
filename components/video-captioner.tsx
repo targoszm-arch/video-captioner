@@ -242,6 +242,8 @@ export default function VideoCaptioner() {
 
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
+    // Clear the native input so selecting the same file again still triggers onChange.
+    e.target.value = '';
     setErrorMessage('');
     if (file && file.type === 'video/mp4') {
       setVideoFile(file);
@@ -394,6 +396,18 @@ export default function VideoCaptioner() {
               <div className="flex-1 flex flex-col relative min-h-0">
                 {/* Video Area */}
                 <div className="flex-1 bg-black relative flex items-center justify-center overflow-hidden">
+                    <div className="absolute right-4 top-4 z-[60]">
+                      <label className="flex cursor-pointer items-center gap-2 rounded-md bg-white/95 px-3 py-2 text-sm font-medium text-gray-700 shadow-lg transition-colors hover:bg-white">
+                        <Upload className="h-4 w-4" />
+                        Replace video
+                        <input
+                          type="file"
+                          accept="video/mp4"
+                          className="sr-only"
+                          onChange={handleFileUpload}
+                        />
+                      </label>
+                    </div>
                     
                     {/* Aspect Ratio Wrapper for precise caption positioning */}
                     <div 
