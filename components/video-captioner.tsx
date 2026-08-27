@@ -133,6 +133,8 @@ export default function VideoCaptioner() {
   const [activeTab, setActiveTab] = useState('styles');
   const [captionSize, setCaptionSize] = useState(100);
   const [captionColors, setCaptionColors] = useState({ background: '#111827', text: '#ffffff', highlight: '#facc15' });
+  const [captionBackgroundOpacity, setCaptionBackgroundOpacity] = useState(60);
+  const [captionRadius, setCaptionRadius] = useState(8);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcriptionMessage, setTranscriptionMessage] = useState('');
   
@@ -452,7 +454,7 @@ export default function VideoCaptioner() {
                             </div>
                             <div 
                             className={`text-center transition-all duration-200 ${selectedStyle.className} ${selectedStyle.id === 'style-28' ? 'w-full' : ''}`}
-                            style={{ ...(selectedStyle.style || {}), fontSize: `calc(1em * ${captionSize / 100})`, color: captionColors.text, backgroundColor: captionColors.background }}
+                            style={{ ...(selectedStyle.style || {}), fontSize: `calc(1em * ${captionSize / 100})`, color: captionColors.text, backgroundColor: captionColors.background, backgroundColor: `color-mix(in srgb, ${captionColors.background} ${captionBackgroundOpacity}%, transparent)`, borderRadius: `${captionRadius}px` }}
                             >
                             {(activePhrase || phrases[0]).words.map((wordObj, i) => {
                                 // Determine if this word is currently active or has already been passed in this phrase
@@ -578,7 +580,9 @@ export default function VideoCaptioner() {
 
                   <div className="p-4 border-b border-gray-200 space-y-3">
                     <div className="flex items-center justify-between"><h3 className="text-sm font-medium text-gray-600">Appearance</h3><span className="text-xs text-gray-500">{captionSize}%</span></div>
-                    <label className="flex items-center justify-between gap-3 text-xs text-gray-600">Size<input aria-label="Caption size" type="range" min="50" max="200" step="5" value={captionSize} onChange={(e) => setCaptionSize(Number(e.target.value))} className="w-32 accent-indigo-600" /></label>
+                    <label className="flex items-center justify-between gap-3 text-xs text-gray-600">Size <span className="flex items-center gap-2"><span>{captionSize}%</span><input aria-label="Caption size" type="range" min="50" max="200" step="5" value={captionSize} onChange={(e) => setCaptionSize(Number(e.target.value))} className="w-28 accent-indigo-600" /></span></label>
+                    <label className="flex items-center justify-between gap-3 text-xs text-gray-600">Background opacity <span className="flex items-center gap-2"><span>{captionBackgroundOpacity}%</span><input aria-label="Caption background opacity" type="range" min="0" max="100" step="5" value={captionBackgroundOpacity} onChange={(e) => setCaptionBackgroundOpacity(Number(e.target.value))} className="w-28 accent-indigo-600" /></span></label>
+                    <label className="flex items-center justify-between gap-3 text-xs text-gray-600">Corner rounding <span className="flex items-center gap-2"><span>{captionRadius}px</span><input aria-label="Caption corner rounding" type="range" min="0" max="32" step="1" value={captionRadius} onChange={(e) => setCaptionRadius(Number(e.target.value))} className="w-28 accent-indigo-600" /></span></label>
                     <div className="grid grid-cols-3 gap-2">{([['background','Background'],['text','Main text'],['highlight','Highlight']] as const).map(([key,label]) => <label key={key} className="flex flex-col gap-1 text-[11px] text-gray-500"><span>{label}</span><input aria-label={`${label} color`} type="color" value={captionColors[key]} onChange={(e) => setCaptionColors((colors) => ({ ...colors, [key]: e.target.value }))} className="h-8 w-full cursor-pointer rounded border border-gray-200" /></label>)}</div>
                   </div>
 
