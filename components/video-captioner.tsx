@@ -118,6 +118,7 @@ const groupTranscriptIntoPhrases = (transcript) => {
 export default function VideoCaptioner() {
   const [videoFile, setVideoFile] = useState(null);
   const [videoUrl, setVideoUrl] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -133,6 +134,8 @@ export default function VideoCaptioner() {
   const [activeTab, setActiveTab] = useState('styles');
   const [captionSize, setCaptionSize] = useState(100);
   const [captionColors, setCaptionColors] = useState({ background: '#111827', text: '#ffffff', highlight: '#facc15' });
+  const [captionBackgroundOpacity, setCaptionBackgroundOpacity] = useState(60);
+  const [captionRadius, setCaptionRadius] = useState(8);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcriptionMessage, setTranscriptionMessage] = useState('');
   
@@ -170,6 +173,28 @@ export default function VideoCaptioner() {
     } catch (error) { setTranscriptionMessage(error instanceof Error ? error.message : 'Transcription failed.'); }
     finally { setIsTranscribing(false); }
   };
+
+  // Restore the last uploaded Blob-backed video after a refresh.
+  useEffect(() => {
+    const savedVideo = window.localStorage.getItem('karaoke-captioner-video');
+    if (savedVideo) {
+      try {
+        const { url, name } = JSON.parse(savedVideo);
+        if (url) {
+          setVideoUrl(url);
+          setVideoFile({ name: name || 'Saved video.mp4', type: 'video/mp4' });
+        }
+      } catch {
+        window.localStorage.removeItem('karaoke-captioner-video');
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (videoUrl && videoUrl.startsWith('http')) {
+      window.localStorage.setItem('karaoke-captioner-video', JSON.stringify({ url: videoUrl, name: videoFile?.name }));
+    }
+  }, [videoUrl, videoFile]);
 
   // Process transcript into phrases on load
   useEffect(() => {
@@ -240,21 +265,34 @@ export default function VideoCaptioner() {
     };
   }, [videoUrl]);
 
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
     // Clear the native input so selecting the same file again still triggers onChange.
     e.target.value = '';
     setErrorMessage('');
-    if (file && file.type === 'video/mp4') {
+    if (!file) return;
+    if (file.type !== 'video/mp4') {
+      setErrorMessage('Please upload a valid MP4 file.');
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await fetch('/api/upload-video', { method: 'POST', body: formData });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Video upload failed.');
       setVideoFile(file);
-      const url = URL.createObjectURL(file);
-      setVideoUrl(url);
+      setVideoUrl(result.url);
       setIsPlaying(false);
       setCurrentTime(0);
       setActivePhrase(null);
       setActiveWordIndex(-1);
-    } else if (file) {
-      setErrorMessage("Please upload a valid MP4 file.");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Video upload failed.');
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -371,8 +409,8 @@ export default function VideoCaptioner() {
                   </div>
                 )}
                 
-                <div className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg font-medium transition-colors shadow-sm">
-                  Select File
+                <div className={`bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg font-medium transition-colors shadow-sm ${isUploading ? 'pointer-events-none opacity-70' : ''}`}>
+                  {isUploading ? 'Uploading video…' : 'Select File'}
                   <input 
                     id="video-upload"
                     type="file" 
@@ -452,7 +490,7 @@ export default function VideoCaptioner() {
                             </div>
                             <div 
                             className={`text-center transition-all duration-200 ${selectedStyle.className} ${selectedStyle.id === 'style-28' ? 'w-full' : ''}`}
-                            style={{ ...(selectedStyle.style || {}), fontSize: `calc(1em * ${captionSize / 100})`, color: captionColors.text, backgroundColor: captionColors.background }}
+                            style={{ ...(selectedStyle.style || {}), fontSize: `calc(1em * ${captionSize / 100})`, color: captionColors.text, backgroundColor: captionColors.background, backgroundColor: `color-mix(in srgb, ${captionColors.background} ${captionBackgroundOpacity}%, transparent)`, borderRadius: `${captionRadius}px` }}
                             >
                             {(activePhrase || phrases[0]).words.map((wordObj, i) => {
                                 // Determine if this word is currently active or has already been passed in this phrase
@@ -578,7 +616,9 @@ export default function VideoCaptioner() {
 
                   <div className="p-4 border-b border-gray-200 space-y-3">
                     <div className="flex items-center justify-between"><h3 className="text-sm font-medium text-gray-600">Appearance</h3><span className="text-xs text-gray-500">{captionSize}%</span></div>
-                    <label className="flex items-center justify-between gap-3 text-xs text-gray-600">Size<input aria-label="Caption size" type="range" min="50" max="200" step="5" value={captionSize} onChange={(e) => setCaptionSize(Number(e.target.value))} className="w-32 accent-indigo-600" /></label>
+                    <label className="flex items-center justify-between gap-3 text-xs text-gray-600">Size <span className="flex items-center gap-2"><span>{captionSize}%</span><input aria-label="Caption size" type="range" min="50" max="200" step="5" value={captionSize} onChange={(e) => setCaptionSize(Number(e.target.value))} className="w-28 accent-indigo-600" /></span></label>
+                    <label className="flex items-center justify-between gap-3 text-xs text-gray-600">Background opacity <span className="flex items-center gap-2"><span>{captionBackgroundOpacity}%</span><input aria-label="Caption background opacity" type="range" min="0" max="100" step="5" value={captionBackgroundOpacity} onChange={(e) => setCaptionBackgroundOpacity(Number(e.target.value))} className="w-28 accent-indigo-600" /></span></label>
+                    <label className="flex items-center justify-between gap-3 text-xs text-gray-600">Corner rounding <span className="flex items-center gap-2"><span>{captionRadius}px</span><input aria-label="Caption corner rounding" type="range" min="0" max="32" step="1" value={captionRadius} onChange={(e) => setCaptionRadius(Number(e.target.value))} className="w-28 accent-indigo-600" /></span></label>
                     <div className="grid grid-cols-3 gap-2">{([['background','Background'],['text','Main text'],['highlight','Highlight']] as const).map(([key,label]) => <label key={key} className="flex flex-col gap-1 text-[11px] text-gray-500"><span>{label}</span><input aria-label={`${label} color`} type="color" value={captionColors[key]} onChange={(e) => setCaptionColors((colors) => ({ ...colors, [key]: e.target.value }))} className="h-8 w-full cursor-pointer rounded border border-gray-200" /></label>)}</div>
                   </div>
 
