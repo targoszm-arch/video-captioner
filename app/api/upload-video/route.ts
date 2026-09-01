@@ -17,12 +17,15 @@ export async function POST(request: Request) {
     }
 
     const blob = await put(`videos/${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '-')}`, file, {
-      access: 'public',
+      access: 'private',
       addRandomSuffix: false,
       contentType: file.type,
     })
 
-    return NextResponse.json({ url: blob.url, name: file.name })
+    return NextResponse.json({
+      url: `/api/video?pathname=${encodeURIComponent(blob.pathname)}`,
+      name: file.name,
+    })
   } catch (error) {
     console.error('[v0] Video upload failed:', error)
     return NextResponse.json({ error: 'Video upload failed. Please try again.' }, { status: 500 })
